@@ -265,7 +265,7 @@ export function validateBackup(bundle){
  if(bundle.practiceSessions!==undefined){
   if(!Array.isArray(bundle.practiceSessions)||bundle.practiceSessions.length>2000||!bundle.practiceSessions.every(validPracticeSession))throw Error('Invalid backup practice session');
  }
- const {recordings:audioManifest,...learningData}=bundle;
+ const {recordings:_audioManifest,...learningData}=bundle;
  if(JSON.stringify(learningData).length>5_000_000)throw Error('Learning journal exceeds backup safety size limit');
  return true;
 }

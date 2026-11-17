@@ -1,4 +1,7 @@
 node_modules/
+.venv/
+dist/
+.playwright-cli/
 __pycache__/
 *.py[cod]
 .env

@@ -4,8 +4,11 @@ The resulting VocalStudio.pyz runs a private loopback HTTP server directly from
 its own archive; no extraction, npm installation, or backend is required.
 """
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+from datetime import datetime, timezone
 import argparse
+import hashlib
+import os
 
 ROOT = Path(__file__).resolve().parent
 FILES = [
@@ -92,10 +95,23 @@ def main():
     args = parser.parse_args()
     output = Path(args.output).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        epoch = int(os.environ.get('SOURCE_DATE_EPOCH', '1704067200'))
+        timestamp = datetime.fromtimestamp(epoch, timezone.utc)
+        if not 1980 <= timestamp.year <= 2107:
+            raise ValueError('ZIP timestamps require years 1980–2107')
+    except (ValueError, OverflowError, OSError) as error:
+        parser.error(f'Invalid SOURCE_DATE_EPOCH: {error}')
     with ZipFile(output, 'w', compression=ZIP_DEFLATED, compresslevel=9) as archive:
-        archive.writestr('__main__.py', BOOTSTRAP)
-        for name in FILES:
-            archive.write(ROOT / name, name)
+        for name in ['__main__.py', *sorted(FILES)]:
+            info = ZipInfo(name, timestamp.timetuple()[:6])
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            info.compress_type = ZIP_DEFLATED
+            content = BOOTSTRAP.encode('utf-8') if name == '__main__.py' else (ROOT / name).read_bytes()
+            archive.writestr(info, content, compresslevel=9)
+    checksum = hashlib.sha256(output.read_bytes()).hexdigest()
+    output.with_suffix(output.suffix + '.sha256').write_text(f'{checksum}  {output.name}\n', encoding='utf-8')
     print(f'Created {output} ({output.stat().st_size:,} bytes, {len(FILES)} app assets)')
 
 if __name__ == '__main__':

@@ -9,7 +9,6 @@ function round(ctx,x,y,w,h,r,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.roundR
 function background(ctx,W,H,top,bottom){const grad=ctx.createLinearGradient(0,0,0,H);grad.addColorStop(0,top);grad.addColorStop(1,bottom);ctx.fillStyle=grad;ctx.fillRect(0,0,W,H);}
 function stars(ctx,t,W,H,amount=44){for(let i=0;i<amount;i++){const x=((i*193.7+37)%W),y=((i*101.9+33)%(H*.7)),glow=.5+.5*Math.sin(t*.0018+i*2.45);circle(ctx,x,y,i%6===0?2:1,`rgba(255,245,224,${.17+glow*.44})`);}}
 function glow(ctx,x,y,r,color){const grad=ctx.createRadialGradient(x,y,0,x,y,r);grad.addColorStop(0,color);grad.addColorStop(1,'transparent');circle(ctx,x,y,r,grad);}
-function noteBadge(ctx,x,y,note,title){glow(ctx,x,y,66,'rgba(245,193,105,.22)');round(ctx,x-47,y-29,94,58,16,'#ffffff18');ctx.strokeStyle='#ffffff55';ctx.lineWidth=1;ctx.strokeRect(x-47,y-29,94,58);label(ctx,note,x,y+5,28);if(title)label(ctx,title,x,y+51,12,'#cddcda');}
 function drawNoteRunner(ctx,g,W,H,t){
  background(ctx,W,H,'#0e2431','#162826');stars(ctx,t,W,H*.65,57);
  for(let n=0;n<4;n++){const yy=210+n*36;ctx.beginPath();ctx.moveTo(0,yy);for(let x=0;x<=W;x+=24)ctx.lineTo(x,yy+11*Math.sin(x/80+n+t*.00014));ctx.strokeStyle=`rgba(59,166,157,${.14+n*.04})`;ctx.lineWidth=2;ctx.stroke();}
@@ -74,7 +73,7 @@ function drawRiver(ctx,g,W,H,t){
  background(ctx,W,H,'#082e44','#245f72');stars(ctx,t,W,H*.6,35);
  const horizon=H*.48;glow(ctx,W*.76,H*.22,90,'rgba(255,219,145,.24)');circle(ctx,W*.76,H*.22,31,'#fff0b7');
  for(let i=0;i<12;i++){const y=horizon+i*17;ctx.beginPath();for(let x=0;x<W;x+=12){const yy=y+3*Math.sin((x+t*.17)/32+i*2);if(x===0)ctx.moveTo(x,yy);else ctx.lineTo(x,yy);}ctx.strokeStyle=`rgba(157,220,236,${.07+i*.011})`;ctx.lineWidth=2;ctx.stroke();}
- const now=t-(g.startedAt??t),beat=targetAt(g),offset=beat?.offsetMs??0;
+ const now=t-(g.startedAt??t);
  for(let i=0;i<g.targets.length;i++){
   const b=g.targets[i];const x=W*.34+(b.offsetMs-now)*.13;
   if(x<0||x>W+45)continue;
@@ -100,6 +99,6 @@ export function drawGameScene(canvas,session,{time=0}={}){
  else if(session.mode==='rhythm-river')drawRiver(ctx,session,W,H,t);
  else drawNoteRunner(ctx,session,W,H,t);
  // Progress dots are part of the artwork, while accessible status stays in DOM.
- const radius=5,pad=12,w=Math.min(400,session.targets.length*22),x0=(W-w)/2;
+ const radius=5,w=Math.min(400,session.targets.length*22),x0=(W-w)/2;
  for(let i=0;i<session.targets.length;i++)circle(ctx,x0+(i+.5)*w/session.targets.length,H-21,radius,i<session.index?'#b6f2d8':i===session.index?'#ffe5a8':'#ffffff50');
 }

@@ -1,53 +1,28 @@
-"""Chromium visual smoke check using in-memory modules.
-Network navigation to localhost is blocked in some automated environments. This
-checks the real interface/DOM without claiming real IndexedDB or microphone tests.
-"""
+"""Rendered desktop and mobile journeys against the real local application."""
+from argparse import ArgumentParser
 from pathlib import Path
 import re
+import sys
 from tempfile import gettempdir
-from playwright.sync_api import sync_playwright
-ROOT=Path(__file__).resolve().parents[1]
-OUT=Path(gettempdir())/'vocal-studio-visual-check'
-OUT.mkdir(exist_ok=True)
+from playwright.sync_api import sync_playwright, expect
+from browser_check import local_app
 
-MODULES=['music','advanced','base-catalog','advanced-catalog','catalog','learning','store','audio','diagnostics','games-core','games-canvas','games-screen','app']
+parser=ArgumentParser()
+parser.add_argument('--channel',default='msedge' if sys.platform=='win32' else 'chromium')
+parser.add_argument('--output',type=Path,default=Path(gettempdir())/'vocal-studio-visual-check')
+args=parser.parse_args()
+OUT=args.output
+OUT.mkdir(parents=True,exist_ok=True)
 
-def bundle():
-    output=[]
-    for name in MODULES:
-        if name=='store':
-            output.append("""const __mod_store={loadStudioState:async()=>__mod_learning.createInitialState(),saveStudioState:async(s)=>s,createPortableBackup:async(s)=>__mod_learning.backupState(s),restorePortableBackup:async(b)=>__mod_learning.restoreBackup(b),clearPersonalData:async()=>__mod_learning.createInitialState(),saveRecording:async()=>{},listRecordings:async()=>[],getRecording:async()=>null,deleteRecording:async()=>{}};""")
-            continue
-        if name=='audio':
-            output.append("""const __mod_audio={audio:{tone(){},melody(){},click(){},stopTones(){},stopMic(){},sample(){return {hz:0,confidence:0}},availableInputs:async()=>[]}};""")
-            continue
-        source=(ROOT/'src'/f'{name}.js').read_text()
-        imports=[]
-        def inject_import(match):
-            defs=[]
-            for item in match.group(1).split(','):
-                part=item.strip().split(' as ')
-                defs.append(f'{part[0]}: {part[-1]}' if len(part)>1 else part[0])
-            imports.append(f"const {{{', '.join(defs)}}}=__mod_{match.group(2).replace('-','_')};")
-            return ''
-        source=re.sub(r"^import\s*\{([^}]+)\}\s*from\s*['\"]\./([a-z-]+)\.js['\"];\s*$",inject_import,source,flags=re.M)
-        source=source.replace("new URL('./microphone-worklet.js',import.meta.url)","'./microphone-worklet.js'")
-        exported=re.findall(r'\bexport\s+(?:const|class|(?:async\s+)?function)\s+(\w+)',source)
-        source=re.sub(r'\bexport\s+(?=(?:const|class|(?:async\s+)?function)\s+)', '',source)
-        if re.search(r'\bimport\s+|\bexport\s+',source):raise RuntimeError(f'Unprocessed module token in {name}')
-        output.append(f"const __mod_{name.replace('-','_')}=(()=>{{\n"+'\n'.join(imports)+'\n'+source+'\n'+('return {'+','.join(exported)+'};' if exported else '')+'\n})();')
-    return '\n'.join(output)
-
-with sync_playwright() as p:
-    browser=p.chromium.launch(headless=True,executable_path='/usr/bin/chromium',args=['--no-sandbox'])
+with local_app(None) as url, sync_playwright() as p:
+    browser=p.chromium.launch(channel=args.channel)
     page=browser.new_page(viewport={'width':1440,'height':900},device_scale_factor=1)
     errors=[]
     page.on('pageerror',lambda error:errors.append(str(error)))
-    page.set_content('<!doctype html><html><head><meta charset="utf-8"><style>'+ (ROOT/'styles.css').read_text()+'</style></head><body><div id="app"></div><div id="toast"></div></body></html>')
+    page.goto(url)
     try:
-        page.add_script_tag(content=bundle())
         page.get_by_text('Start with one good note.').first.wait_for(timeout=10000)
-        for tab,label in [('today','Start with one good note'),('academy','Learn music, one skill at a time'),('studio','The Practice Studio'),('games','Play the notes. Change the world.'),('library','Library & repertoire'),('progress','Progress'),('settings','Personal settings')]:
+        for tab,label in [('today','Start with one good note'),('academy','Learn music, one skill at a time'),('studio','The Practice Studio'),('games','Play the notes. Change the world.'),('library','Library & repertoire'),('progress','Your learning journey'),('settings','Personal settings')]:
             page.locator(f'[data-action=tab][data-tab={tab}]').first.click()
             assert label.lower() in page.locator('#main-content').inner_text().lower(),tab
             page.screenshot(path=str(OUT/f'{tab}.png'),full_page=True)
@@ -143,8 +118,7 @@ with sync_playwright() as p:
         mobile=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1, is_mobile=True, has_touch=True)
         mobile_errors=[]
         mobile.on('pageerror',lambda error:mobile_errors.append(str(error)))
-        mobile.set_content('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><style>'+(ROOT/'styles.css').read_text()+'</style></head><body><div id="app"></div><div id="toast"></div></body></html>')
-        mobile.add_script_tag(content=bundle())
+        mobile.goto(url)
         mobile.get_by_text('Start with one good note.').first.wait_for(timeout=10000)
         for selected in ['today','academy','studio','games','library']:
             mobile.locator(f'[data-action=tab][data-tab={selected}]').first.click()
@@ -170,6 +144,6 @@ with sync_playwright() as p:
         assert not mobile_errors,mobile_errors
         mobile.close()
         assert not errors,errors
-        print('Chromium in-memory interface visual check PASSED, screenshots:',OUT)
+        print('Real-origin desktop, arcade and mobile visual checks passed. Screenshots:',OUT)
     finally:
         browser.close()

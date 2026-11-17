@@ -2,25 +2,21 @@
 A synthetic source verifies browser codec/recording compatibility; it does not
 substitute for microphone permissions or physical-device measurements.
 """
-from pathlib import Path
-import re
+from argparse import ArgumentParser
+import sys
 from playwright.sync_api import sync_playwright
-ROOT=Path(__file__).resolve().parents[1]
-source=[]
-for name in ['music','advanced','audio']:
-    js=(ROOT/'src'/f'{name}.js').read_text()
-    js=re.sub(r"^import\s*\{[^}]+\}\s*from\s*['\"]\./[a-z-]+\.js['\"];\s*$",'',js,flags=re.M)
-    js=re.sub(r'\bexport\s+', '',js)
-    js=js.replace("new URL('./microphone-worklet.js',import.meta.url)","'./microphone-worklet.js'")
-    source.append(js)
-source.append('globalThis.studioAudio=audio;')
-with sync_playwright() as p:
-    browser=p.chromium.launch(headless=True,executable_path='/usr/bin/chromium',args=['--no-sandbox','--autoplay-policy=no-user-gesture-required'])
+from browser_check import local_app
+
+parser=ArgumentParser()
+parser.add_argument('--channel',default='msedge' if sys.platform=='win32' else 'chromium')
+args=parser.parse_args()
+with local_app(None) as url, sync_playwright() as p:
+    browser=p.chromium.launch(channel=args.channel,args=['--autoplay-policy=no-user-gesture-required'])
     page=browser.new_page()
-    page.set_content('<html><body>Local audio verification</body></html>')
-    page.add_script_tag(content='\n'.join(source))
+    page.goto(url)
+    page.locator('.nav-button').first.wait_for()
     results=page.evaluate('''async () => {
-       const audio=globalThis.studioAudio;
+       const {audio}=await import('./src/audio.js');
        const ctx=audio.context();await ctx.resume();
        const dest=ctx.createMediaStreamDestination();
        const sine=ctx.createOscillator();sine.frequency.value=220;
