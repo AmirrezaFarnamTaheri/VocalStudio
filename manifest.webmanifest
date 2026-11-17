@@ -1,0 +1,1 @@
+{"name":"Vocal Studio Personal","short_name":"Vocal Studio","description":"Private offline music learning studio","start_url":"./index.html","scope":"./","display":"standalone","background_color":"#111510","theme_color":"#111510","icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}

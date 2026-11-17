@@ -1,0 +1,5 @@
+const CACHE='vocal-studio-personal-shell-v6';
+const ASSETS=['./','./index.html','./styles.css','./manifest.webmanifest','./assets/icon.svg','./src/app.js','./src/music.js','./src/catalog.js','./src/base-catalog.js','./src/learning.js','./src/store.js','./src/audio.js','./src/diagnostics.js','./src/advanced.js','./src/advanced-catalog.js','./src/microphone-worklet.js','./src/games-core.js','./src/games-canvas.js','./src/games-screen.js'];
+self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
+self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+self.addEventListener('fetch',event=>{const request=event.request;if(request.method!=='GET'||new URL(request.url).origin!==self.location.origin)return;event.respondWith(fetch(request).then(response=>{if(response.ok){const clone=response.clone();void caches.open(CACHE).then(cache=>cache.put(request,clone));}return response;}).catch(()=>caches.match(request)));});
