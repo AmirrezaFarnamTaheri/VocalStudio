@@ -24,8 +24,10 @@ with tempfile.TemporaryDirectory() as directory:
     digest = hashlib.sha256(outputs[0].read_bytes()).hexdigest()
     assert outputs[0].with_suffix('.pyz.sha256').read_text().strip() == f'{digest}  first.pyz'
     with zipfile.ZipFile(outputs[0]) as archive:
+        expected = {'__main__.py', 'index.html', 'styles.css', 'sw.js', 'manifest.webmanifest', 'assets/icon.svg',
+                    *(asset.relative_to(source).as_posix() for asset in source.glob('src/*.js'))}
+        assert len(archive.namelist()) == len(expected) and set(archive.namelist()) == expected, 'Portable asset inventory changed'
         for name in archive.namelist():
             if name != '__main__.py':
                 assert archive.read(name) == (source / name).read_bytes(), f'Stale asset: {name}'
-        assert 'src/session.js' in archive.namelist()
     print('Build passed: byte-for-byte reproducibility, SHA-256 checksum, source asset parity.')
