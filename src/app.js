@@ -23,20 +23,20 @@ let game=null,gameOwnsMic=false,gameRaf=0,gameStartTimer=0,gameGeneration=0,game
 const safe=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const moment=s=>s?new Date(s).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
 const clip=(s,n=130)=>safe(String(s??'').slice(0,n));
-function showToast(message,error=false){
+function showToast(message,error=false,sticky=false){
  clearTimeout(showToast.timer);showToast.timer=undefined;
  if(saveError&&!error)return;
  toastRegion.textContent=message;toastRegion.className=`toast${error?' error':''}`;
  toastRegion.setAttribute?.('role',error?'alert':'status');
- if(error){
+ if(error&&sticky){
   saveError=message;
   if(document.createElement){const dismiss=document.createElement('button');dismiss.type='button';dismiss.className='btn sm';dismiss.textContent='Dismiss';dismiss.dataset.action='dismiss-error';toastRegion.append(dismiss);}
- }else showToast.timer=setTimeout(()=>{toastRegion.textContent='';toastRegion.className='';},4600);
+ }else showToast.timer=setTimeout(()=>{if(!saveError){toastRegion.textContent='';toastRegion.className='';}},4600);
 }
-function fail(error){
+function fail(error,recordingSaveFailed=false){
  console.error(error);
  const message=error?.name==='QuotaExceededError'?'Storage is full. Download a backup, remove unwanted clips, then try saving again.':error?.name==='NotAllowedError'?'Microphone access was denied. Allow microphone access in your browser settings, then try again.':error?.message||'This action could not finish. Your changes have not been saved; try again.';
- showToast(message,true);
+ showToast(message,true,error?.name==='QuotaExceededError'||recordingSaveFailed);
 }
 let commitQueue=Promise.resolve();
 function commit(change){
@@ -294,12 +294,17 @@ function openRoutine(id){
 function persistRoutineDraft(){
  clearTimeout(draftTimer);draftTimer=null;
  const routine=state.routines.find(r=>r.id===activeRoutineId);if(!routine)return draftQueue;
+ if(!routineChecked.size&&!routineReflection.trim()){
+  const cleared=draftQueue.then(()=>saveLocalValue('routine-draft',null)).then(()=>{routineDraft=null;});
+  draftQueue=cleared.catch(()=>{});return cleared;
+ }
  const draft=makeRoutineDraft(routine,{checked:[...routineChecked],reflection:routineReflection,elapsedSeconds:Math.min(86400,routineElapsed+Math.max(0,(performance.now()-routineStartedAt)/1000))});
  const pending=draftQueue.then(()=>saveRoutineDraft(draft,state.routines)).then(()=>{routineDraft=draft;});
  draftQueue=pending.catch(()=>{});return pending;
 }
 function scheduleRoutineDraft(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>persistRoutineDraft().catch(fail),500);}
 async function closeRoutine(){
+ if(routineSaving)return;
  await persistRoutineDraft();activeRoutineId=null;routineChecked=new Set();routineReflection='';routineStartedAt=0;routineElapsed=0;render();
 }
 function resumeRoutine(){
@@ -436,7 +441,7 @@ async function startVoiceRecording(){
   if(blob.size){pendingRecording={blob,name:`Voice practice · ${new Date().toLocaleString()}`,type:blob.type};await retryRecordingSave();}
   else showToast('No usable recording was captured.',true);
   render();
- }).catch(err=>{if(!micOn)audio.stopMic();if(version===recordingVersion){recordCtrl=null;fail(err);render();}});
+ }).catch(err=>{if(!micOn)audio.stopMic();if(version===recordingVersion){recordCtrl=null;fail(err,true);render();}});
 }
 async function retryRecordingSave(){
  if(!pendingRecording||recordingSaving)return;recordingSaving=true;const clip=pendingRecording;
@@ -562,7 +567,7 @@ async function handleClick(event){const el=event.target.closest('[data-action]')
   case 'download-recording':await downloadPersonalRecording(el.dataset.id);break;
   case 'listen-recording':{const rec=await getRecording(el.dataset.id);if(!rec)throw Error('Clip no longer exists');const slot=document.querySelector(`[data-recording-slot="${CSS.escape(rec.id)}"]`);if(slot){slot.textContent='';const player=document.createElement('audio');player.controls=true;player.src=URL.createObjectURL(rec.blob);player.onended=()=>URL.revokeObjectURL(player.src);slot.append(player);player.play().catch(()=>{});}break;}
   case 'delete-recording':if(confirm('Delete this recording permanently from this device?')){await deleteRecording(el.dataset.id);recordingAnalyses.delete(el.dataset.id);comparisonIds.delete(el.dataset.id);await refreshRecordings();showToast('Recording deleted.');}break;
-  case 'recording-retry':await retryRecordingSave();break;
+  case 'recording-retry':try{await retryRecordingSave();}catch(err){fail(err,true);}break;
   case 'recording-discard':if(confirm('Discard the unsaved clip? Download it first if you want to keep it.')){pendingRecording=null;saveError='';toastRegion.textContent='';toastRegion.className='';render();}break;
   case 'recording-download':if(pendingRecording){const url=URL.createObjectURL(pendingRecording.blob),link=document.createElement('a');link.href=url;link.download=recordingFilename(pendingRecording);document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);showToast('Clip download started. Keep this tab open until you have saved it.');}break;
   case 'download-backup':await downloadBackup();break;
@@ -629,7 +634,7 @@ function handleKeyboard(event){
   if(event.code==='Space'&&game.source==='microphone'&&game.phase==='playing'){event.preventDefault();void pauseGame();return;}
  }
  if(event.key==='Escape'&&restoreSelection){if(!restoring){restoreSelection=null;render();document.querySelector('[data-action="restore-backup"]')?.focus();}return;}
- if(event.key==='Escape'&&activeRoutineId!==null&&!lessonSlug){closeRoutine().catch(fail);return;}if(event.key==='Escape'&&lessonSlug){closeLesson();render();return;}if(event.code==='Space'&&!event.repeat&&rhythm.on&&!['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName)){event.preventDefault();tapBeat();}}
+ if(event.key==='Escape'&&activeRoutineId!==null&&!lessonSlug){if(!routineSaving)closeRoutine().catch(fail);return;}if(event.key==='Escape'&&lessonSlug){closeLesson();render();return;}if(event.code==='Space'&&!event.repeat&&rhythm.on&&!['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName)){event.preventDefault();tapBeat();}}
 document.addEventListener('click',handleClick);
 document.addEventListener('change',handleChange);
 document.addEventListener('submit',handleSubmit);
