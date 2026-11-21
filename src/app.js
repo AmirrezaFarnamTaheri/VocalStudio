@@ -632,10 +632,14 @@ function handleKeyboard(event){
  const modal=document.querySelector('.restore-dialog')??document.querySelector('.lesson-dialog');
  if(modal&&event.key==='Tab'){
   const controls=[...modal.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]')];
-  const first=controls[0],last=controls.at(-1);
-  if(!first){event.preventDefault();return;}
-  if(event.shiftKey&&(document.activeElement===first||!controls.includes(document.activeElement))){event.preventDefault();last.focus();return;}
-  if(!event.shiftKey&&(document.activeElement===last||!controls.includes(document.activeElement))){event.preventDefault();first.focus();return;}
+  event.preventDefault();
+  if(!controls.length)return;
+  const current=controls.indexOf(document.activeElement);
+  const next=event.shiftKey
+   ? (current<=0?controls.length-1:current-1)
+   : (current<0||current===controls.length-1?0:current+1);
+  controls[next].focus();
+  return;
  }
  if(restoring){if(event.key==='Escape')event.preventDefault();return;}
  if(tab==='games'&&game&&!['INPUT','TEXTAREA','SELECT','BUTTON'].includes(document.activeElement?.tagName)&&!event.repeat){
@@ -654,6 +658,14 @@ document.addEventListener('change',handleChange);
 document.addEventListener('submit',handleSubmit);
 document.addEventListener('input',handleInput);
 document.addEventListener('keydown',handleKeyboard);
+// Keep pointer and programmatic focus inside the active modal as well as Tab.
+document.addEventListener('focusin',event=>{
+ const modal=document.querySelector('.restore-dialog')??document.querySelector('.lesson-dialog');
+ if(modal&&!modal.contains(event.target)){
+  const control=modal.querySelector('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled)');
+  (control??modal.querySelector('[tabindex="-1"]'))?.focus();
+ }
+});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&tab==='games'&&game?.phase==='playing')void pauseGame();if(document.hidden&&activeRoutineId!==null&&!routineSaving&&!restoring)persistRoutineDraft().catch(fail);});
 async function loadWorkspace(){
  state=hydrateState(await loadStudioState());if(!state||!Array.isArray(state.lessons))throw Error('Unable to read your saved progress. Try reopening this browser profile.');
