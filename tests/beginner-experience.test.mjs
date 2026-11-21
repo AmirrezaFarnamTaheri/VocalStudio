@@ -29,15 +29,19 @@ test('Today offers optional setup without duplicate hero actions or developer-fa
 });
 
 test('routine progress is saved as a draft, recovered without overnight elapsed time, and completed atomically',async()=>{
-  const drafts=[],writes=[];
-  const h=harness({saveRoutineDraft:async draft=>drafts.push(draft),saveStudioState:async(s,options)=>{writes.push(options);return s;}});
+  const drafts=[],writes=[];let clock=10000;
+  const h=harness({performance:{now:()=>clock},saveRoutineDraft:async draft=>drafts.push(draft),saveStudioState:async(s,options)=>{writes.push(options);return s;}});
   h.run('openRoutine(state.routines[0].id);routineChecked.add(0);routineReflection="Worked gently"');
+  clock=20000;
   await h.run('persistRoutineDraft()');
   assert.equal(drafts.at(-1).reflection,'Worked gently');
+  assert.equal(drafts.at(-1).elapsedSeconds,10);
   await h.run('closeRoutine()');
   assert.equal(h.run('state.practiceSessions.length'),0);
+  clock+=8*60*60*1000;
   await h.run('resumeRoutine()');
   assert.equal(h.run('routineChecked.has(0)'),true);
+  assert.equal(h.run('routineElapsed'),10,'resuming after eight hours must not count time away');
   await h.run('finishRoutine()');
   assert.equal(writes.at(-1).completeRoutine,true);
   assert.equal(h.run('state.practiceSessions.length'),1);
@@ -55,12 +59,16 @@ test('a failed recording save keeps the clip available for retry instead of losi
   assert.equal(calls,2);
 });
 
-test('restore preview names replacement and cancel does not touch saved data',()=>{
-  const h=harness();
+test('restore preview names replacement and cancel does not touch saved data',async()=>{
+  const writes=[];
+  const h=harness({saveStudioState:async s=>{writes.push(s);return s;},restorePortableBackup:async()=>{writes.push('restore');}});
   h.run('restoreSelection={bundle:backupState(state),summary:previewPortableBackup(backupState(state))};render()');
   assert.match(h.elements.app.innerHTML,/Your saved recordings will be kept/);
   assert.match(h.elements.app.innerHTML,/data-action="restore-apply"/);
   assert.match(h.elements.app.innerHTML,/data-action="restore-cancel"/);
+  await h.run("handleClick({target:{closest:()=>({dataset:{action:'restore-cancel'}})}})");
+  assert.equal(h.run('restoreSelection'),null);
+  assert.deepEqual(writes,[]);
 });
 
 test('repeated save clicks record one lesson attempt',async()=>{
@@ -83,9 +91,30 @@ test('reset blocks competing saves and clears local draft state',async()=>{
   assert.equal(h.run('state.preferences.learnerName'),'Solo Vocalist');
 });
 
-test('failed actions remain visible until dismissed without replacing a learner form',()=>{
+test('storage quota failures remain visible until dismissed',async()=>{
   const h=harness({console:{error(){}}});
-  h.run('fail(Error("Not enough storage"))');
-  assert.match(h.elements.toast.textContent,/Not enough storage/);
+  h.run("fail(Object.assign(Error('Quota exceeded'),{name:'QuotaExceededError'}))");
+  assert.match(h.elements.toast.textContent,/Storage is full/);
   assert.equal(h.run('showToast.timer'),undefined);
+  h.run("showToast('saved')");
+  assert.match(h.elements.toast.textContent,/Storage is full/);
+  await h.run("handleClick({target:{closest:()=>({dataset:{action:'dismiss-error'}})}})");
+  h.run("showToast('saved')");
+  assert.equal(h.elements.toast.textContent,'saved');
+});
+
+test('ordinary errors do not suppress subsequent successful save notifications',()=>{
+  const h=harness({console:{error(){}}});
+  h.run("fail(Error('Choose an audio file first'))");
+  h.run("showToast('Learning evidence saved locally.')");
+  assert.equal(h.elements.toast.textContent,'Learning evidence saved locally.');
+});
+
+test('closing a routine with no progress clears the draft instead of blocking other routines',async()=>{
+  const saved=[];
+  const h=harness({saveLocalValue:async(key,value)=>{saved.push([key,value]);}});
+  h.run('openRoutine(state.routines[0].id)');
+  await h.run('closeRoutine()');
+  assert.deepEqual(saved,[['routine-draft',null]]);
+  assert.equal(h.run('routineDraft'),null);
 });
