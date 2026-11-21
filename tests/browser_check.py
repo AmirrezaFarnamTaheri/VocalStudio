@@ -100,6 +100,7 @@ def run(url, channel, output):
             tab(page, 'settings')
             page.locator('input[name=learnerName]').fill('Independent Learner')
             page.locator('#preferences-form button[type=submit]').click()
+            expect(page.locator('#toast')).to_contain_text('Preferences saved on this device.')
             page.reload()
             ready(page)
             assert saved(page)['name'] == 'Independent Learner'
@@ -160,16 +161,27 @@ def run(url, channel, output):
             expect(page.locator('#toast')).to_have_class('toast error')
             assert saved(page) == before
             action(page, 'dismiss-error').click()
-            rolled_back = page.evaluate("""async () => {
+            rollback = page.evaluate("""async () => {
               const s=await import('./src/store.js');
-              const db=await s.openStudioDatabase(), original=db.transaction.bind(db);
               const bundle=await s.createPortableBackup(await s.loadStudioState(),{includeRecordings:true});
               bundle.preferences.learnerName='Must not survive abort';bundle.recordings=[];
-              db.transaction=(...args)=>{const tx=original(...args);queueMicrotask(()=>tx.abort());return tx;};
-              try {await s.restorePortableBackup(bundle);return false;} catch {return true;}
-              finally {db.transaction=original;}
+              const original=IDBObjectStore.prototype.clear;
+              let injected=false;
+              IDBObjectStore.prototype.clear=function(...args){
+                const request=original.apply(this,args);
+                if(this.name==='recordings')request.addEventListener('success',()=>{
+                  injected=true;
+                  this.transaction.abort();
+                },{once:true});
+                return request;
+              };
+              let aborted=false;
+              try {await s.restorePortableBackup(bundle);} catch {aborted=true;}
+              finally {IDBObjectStore.prototype.clear=original;}
+              return {aborted,injected};
             }""")
-            assert rolled_back, 'Interrupted restore incorrectly reported success'
+            assert rollback['injected'], 'Restore never reached the recording-clear request'
+            assert rollback['aborted'], 'Interrupted restore incorrectly reported success'
             assert saved(page) == before, 'Interrupted transaction changed personal data'
 
             page.locator('#restore-file').set_input_files(str(journal_path))
@@ -178,11 +190,16 @@ def run(url, channel, output):
             page.screenshot(path=str(output / 'restore.png'), full_page=True)
             action(page, 'restore-cancel').click()
             assert saved(page) == before
+            page.locator('input[name=learnerName]').fill('Changed after backup')
+            page.locator('#preferences-form button[type=submit]').click()
+            expect(page.locator('#toast')).to_contain_text('Preferences saved on this device.')
+            assert saved(page)['name'] == 'Changed after backup'
             page.locator('#restore-file').set_input_files(str(journal_path))
             action(page, 'restore-backup').click()
             action(page, 'restore-apply').click()
             expect(page.locator('.restore-dialog')).to_have_count(0)
             assert saved(page)['clips'] == 1
+            assert saved(page)['name'] == 'Independent Learner', 'Apply did not restore the saved journal state'
 
             empty_clips = {**journal, 'recordings': []}
             page.locator('#restore-file').set_input_files({'name':'empty-clips.json','mimeType':'application/json','buffer':json.dumps(empty_clips).encode()})
@@ -211,7 +228,10 @@ def run(url, channel, output):
             assert saved(other)['name'] == 'Independent Learner'
             page = other
 
-            page.evaluate('navigator.serviceWorker.ready')
+            page.wait_for_function("""async () => {
+              const registration=await navigator.serviceWorker.getRegistration();
+              return Boolean(registration?.active);
+            }""",timeout=10000)
             page.reload()
             ready(page)
             page.wait_for_function('navigator.serviceWorker.controller !== null')
@@ -237,6 +257,19 @@ def run(url, channel, output):
             assert page.evaluate("document.activeElement.closest('.restore-dialog') !== null"), 'Reverse focus escaped restore dialog'
             page.keyboard.press('Escape')
             expect(page.locator('.restore-dialog')).to_have_count(0)
+            page.evaluate("""async () => {
+              const store=await import('./src/store.js');
+              await store.saveRecording(new Blob(['synthetic reset fixture'],{type:'audio/webm'}),'Reset fixture');
+            }""")
+            assert saved(page)['clips'] == 1, 'Reset test needs a recording before deletion'
+            tab(page, 'library')
+            page.locator('[data-action=library-section][data-section=routines]').click()
+            action(page, 'start-routine').click()
+            page.locator('.routine-step-input').first.check()
+            action(page, 'routine-close').click()
+            expect(page.locator('.routine-dock')).to_have_count(0)
+            assert saved(page)['draft'] is not None, 'Reset test needs a saved draft before deletion'
+            tab(page, 'settings')
             page.once('dialog', lambda dialog: dialog.accept())
             action(page, 'reset-data').click()
             expect(page.locator('#toast')).to_contain_text('All personal data deleted.')
