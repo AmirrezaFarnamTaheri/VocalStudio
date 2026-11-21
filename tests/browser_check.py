@@ -101,8 +101,13 @@ def run(url, channel, output):
             page.locator('input[name=learnerName]').fill('Independent Learner')
             page.locator('#preferences-form button[type=submit]').click()
             expect(page.locator('#toast')).to_contain_text('Preferences saved on this device.')
+            assert saved(page)['name'] == 'Independent Learner', 'Settings submit did not reach persistent storage'
             page.reload()
             ready(page)
+            page.wait_for_function("""async () => {
+              const store=await import('./src/store.js');
+              return (await store.loadStudioState()).preferences.learnerName === 'Independent Learner';
+            }""",timeout=10000)
             assert saved(page)['name'] == 'Independent Learner'
             assert saved(page)['attempts'] == 1
 
@@ -160,7 +165,8 @@ def run(url, channel, output):
             action(page, 'restore-backup').click()
             expect(page.locator('#toast')).to_have_class('toast error')
             assert saved(page) == before
-            action(page, 'dismiss-error').click()
+            # Invalid backup input is a transient error, not a sticky failed-write alert.
+            expect(action(page, 'dismiss-error')).to_have_count(0)
             rollback = page.evaluate("""async () => {
               const s=await import('./src/store.js');
               const bundle=await s.createPortableBackup(await s.loadStudioState(),{includeRecordings:true});
