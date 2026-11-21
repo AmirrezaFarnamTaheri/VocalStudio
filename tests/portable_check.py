@@ -12,8 +12,9 @@ with tempfile.TemporaryDirectory() as directory:
         subprocess.run([sys.executable,str(ROOT/'build_portable.py'),str(target)],check=True,capture_output=True,text=True)
     assert target.is_file() and target.stat().st_size>5000
     with zipfile.ZipFile(target) as archive:
-        for name in ['__main__.py','index.html','sw.js','styles.css','src/app.js','src/session.js','src/advanced.js','src/microphone-worklet.js']:
-            assert name in archive.namelist(),name
+        expected = {'__main__.py', 'index.html', 'styles.css', 'sw.js', 'manifest.webmanifest', 'assets/icon.svg',
+                    *(asset.relative_to(ROOT).as_posix() for asset in ROOT.glob('src/*.js'))}
+        assert len(archive.namelist()) == len(expected) and set(archive.namelist()) == expected, 'Portable asset inventory changed'
         for name in archive.namelist():
             if name!='__main__.py':
                 assert archive.read(name)==(ROOT/name).read_bytes(),f'Portable asset does not match source: {name}'
