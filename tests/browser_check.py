@@ -256,9 +256,16 @@ def run(url, channel, output):
             tab(page, 'settings')
             page.locator('#restore-file').set_input_files(str(journal_path))
             action(page, 'restore-backup').click()
+            expect(page.locator('.restore-dialog')).to_be_visible()
             for _ in range(9):
                 page.keyboard.press('Tab')
-                assert page.evaluate("document.activeElement.closest('.restore-dialog') !== null"), 'Focus escaped restore dialog'
+                assert page.evaluate("document.activeElement.closest('.restore-dialog') !== null"), (
+                    'Focus escaped restore dialog: ' + str(page.evaluate("""() => ({
+                      active: document.activeElement?.outerHTML?.slice(0, 400),
+                      modal: Boolean(document.querySelector('.restore-dialog')),
+                      readonly: Boolean(document.querySelector('.read-only'))
+                    })"""))
+                )
             page.keyboard.press('Shift+Tab')
             assert page.evaluate("document.activeElement.closest('.restore-dialog') !== null"), 'Reverse focus escaped restore dialog'
             page.keyboard.press('Escape')
