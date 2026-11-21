@@ -427,7 +427,21 @@ async function downloadPersonalRecording(id){
  setTimeout(()=>URL.revokeObjectURL(url),10000);
  showToast('Recording downloaded to your computer.');
 }
-async function refreshAudioDevices(){try{audioDevices=await audio.availableInputs();if(tab==='settings')render();}catch{audioDevices=[];}}
+async function refreshAudioDevices(){try{
+ audioDevices=await audio.availableInputs();
+ if(tab!=='settings')return;
+ // Updating device choices must not replace the entire settings form: its other
+ // fields may contain unsaved edits made while device enumeration was pending.
+ const selector=document.querySelector('#preferences-form select[name="audioInputDeviceId"]');
+ if(!selector)return;
+ const selected=selector.value;
+ const defaultOption=document.createElement('option');defaultOption.value='';defaultOption.textContent='System default';
+ const options=audioDevices.map(device=>{
+  const option=document.createElement('option');option.value=device.deviceId;option.textContent=device.label||'Microphone';return option;
+ });
+ selector.replaceChildren(defaultOption,...options);
+ selector.value=selected;
+}catch{audioDevices=[];}}
 async function refreshRecordings(){recordingItems=await listRecordings();if(tab==='library'&&librarySection==='recordings')render();}
 async function startVoiceRecording(){
  if(!state.preferences.recordingConsentOptIn)throw Error('Enable optional personal recording in Settings first');
