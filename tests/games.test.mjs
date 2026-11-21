@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GAME_MODES, DIFFICULTIES, createGameSession, startGame, stepGame, targetAt, gameSummary, extractGameInput } from '../src/games-core.js';
+import { GAME_MODES, createGameSession, startGame, stepGame, targetAt, gameSummary, extractGameInput } from '../src/games-core.js';
 import { createInitialState, recordGameSession, backupState, restoreBackup, hydrateState, validateBackup } from '../src/learning.js';
 
 const make=(mode='note-runner',source='microphone',difficulty='easy')=>startGame(createGameSession({mode,source,difficulty,tonicMidi:60,seed:17}),1000);

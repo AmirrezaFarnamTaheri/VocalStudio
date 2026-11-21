@@ -1,14 +1,23 @@
 """Executable portable distribution smoke test; network stays on loopback."""
 from pathlib import Path
-import os, socket, subprocess, sys, tempfile, time, urllib.request, zipfile
+from argparse import ArgumentParser
+import socket, subprocess, sys, tempfile, time, urllib.request, zipfile
 ROOT=Path(__file__).resolve().parents[1]
+parser=ArgumentParser()
+parser.add_argument('--artifact',type=Path)
+args=parser.parse_args()
 with tempfile.TemporaryDirectory() as directory:
-    target=Path(directory)/'VocalStudio.pyz'
-    subprocess.run([sys.executable,str(ROOT/'build_portable.py'),str(target)],check=True,capture_output=True,text=True)
+    target=args.artifact.resolve() if args.artifact else Path(directory)/'VocalStudio.pyz'
+    if not args.artifact:
+        subprocess.run([sys.executable,str(ROOT/'build_portable.py'),str(target)],check=True,capture_output=True,text=True)
     assert target.is_file() and target.stat().st_size>5000
     with zipfile.ZipFile(target) as archive:
-        for name in ['__main__.py','index.html','sw.js','styles.css','src/app.js','src/advanced.js','src/microphone-worklet.js']:
-            assert name in archive.namelist(),name
+        expected = {'__main__.py', 'index.html', 'styles.css', 'sw.js', 'manifest.webmanifest', 'assets/icon.svg',
+                    *(asset.relative_to(ROOT).as_posix() for asset in ROOT.glob('src/*.js'))}
+        assert len(archive.namelist()) == len(expected) and set(archive.namelist()) == expected, 'Portable asset inventory changed'
+        for name in archive.namelist():
+            if name!='__main__.py':
+                assert archive.read(name)==(ROOT/name).read_bytes(),f'Portable asset does not match source: {name}'
     sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1];sock.close()
     proc=subprocess.Popen([sys.executable,str(target),'--no-browser','--port',str(port)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     try:

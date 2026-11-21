@@ -45,11 +45,13 @@ If port 8765 is in use, run `python3 VocalStudio.pyz --port 9000` or `python3 ru
 
 In **Academy**, search by a musical concept, choose a level, or show only lessons whose prerequisites you've demonstrated. You can still explore other lessons freely.
 
-### First-run checks
+### Settle in
 
-Open **Settings → Storage health** and choose **Check local storage**. The application writes, reads, and removes a temporary entry without changing your lessons. Optionally choose **Request storage retention**; browser approval is not guaranteed, and a backup is still necessary.
+Choose **Today → Set up my studio** to hear a test tone, optionally check your microphone, and set a comfortable practice range and learning focus. You can skip setup or reopen it later. No microphone permission is requested until you choose the microphone check, and the check never saves a recording.
 
-Next, use **Settings → Audio privacy → Hear test tone** to confirm speaker output, then **Check input for 3 seconds** while gently humming. A confident pitch reading confirms that the browser receives a periodic sound signal; it is not proof of calibrated pitch accuracy. If you plan to record, opt in under Learning profile, record a short clip in Library, play it back, and download it.
+Routine checkboxes and notes save as a local draft. After reopening the app, choose **Resume practice** on Today. Time spent away is not counted. A draft becomes a journal entry only when you choose **Save session**. Drafts stay in this browser and are not included in backups.
+
+For storage checks, open **Settings → Storage health**. Requesting retention can reduce browser eviction risk, but only an exported backup protects against losing the browser profile.
 
 ### Set up your audio
 
@@ -76,9 +78,9 @@ Choose a difficulty, starting note and input mode. **My voice** uses live microp
 
 ## Your data stays yours
 
-Learning history, settings, repertoire and optional recordings are stored in the browser's local storage for the Vocal Studio address. There is no cloud account or automatic transfer. **Settings → Download local backup** exports a JSON file; you can include recordings subject to the size limit. A backup exported without recordings restores progress without deleting existing voice clips. A backup that includes a recording manifest replaces the voice-clip library on restore. Use **Restore selected backup** when transferring to a new browser or computer.
+Learning history, settings, repertoire and optional recordings are stored in the browser's local storage for the Vocal Studio address. There is no cloud account or automatic transfer. **Settings → Download local backup** exports a JSON file; you can include recordings subject to the size limit. A backup exported without recordings restores progress without deleting existing voice clips. A backup that includes a recording manifest replaces the voice-clip library on restore. Choose **Preview selected backup** when transferring to a new browser or computer. Review the incoming item counts and recording policy, optionally download your current studio, then confirm the restore. Invalid or interrupted restores leave the previous saved data unchanged.
 
-For audio libraries larger than the 24 MB combined-backup limit, download recordings individually from **Library → Voice recordings**, and export your learning journal without audio. Regularly save backups outside the application folder. Use one Vocal Studio tab at a time to avoid conflicting edits from multiple windows. Clearing site data, changing browser profile, or switching localhost ports can make your old history unavailable. Backup files containing recordings are not encrypted; keep them in a private location.
+For audio libraries larger than the 24 MB combined-backup limit, download recordings individually from **Library → Voice recordings**, and export your learning journal without audio. Regularly save backups outside the application folder. One tab can save at a time. Other tabs are read-only; close the first tab and choose **Continue here** to switch. A current browser with Web Locks support is required to save. Clearing site data, changing browser profile, or switching localhost ports can make your old history unavailable. Backup files containing recordings are not encrypted; keep them in a private location.
 
 **Settings → Delete all personal data** clears the application’s stored progress and recordings from the current browser profile. Backups saved elsewhere are not affected.
 
@@ -88,4 +90,8 @@ Begin gently and stay within your comfortable range. Stop if singing causes pain
 
 ## Source and tests
 
-The application runs without npm packages or external APIs. If you're using the editable source package and have Node.js installed, `npm test` runs the automated tests and `npm run check` verifies JavaScript syntax. `python3 build_portable.py VocalStudio.pyz` rebuilds the portable application. Browser and microphone permission checks must be completed on the computer where you use Vocal Studio.
+The application runs without npm packages or external APIs. With Node.js 24 or later, `npm test` runs unit tests and `npm run check` verifies JavaScript syntax.
+
+For the full suite, install the test-only browser tools with `python -m pip install -r tests/requirements.txt`, then run `python tests/verify.py`. Windows uses installed Microsoft Edge. On Linux, first run `python -m playwright install --with-deps chromium`, then `python tests/verify.py --channel chromium`. Tests use temporary browser data and include actual storage, offline reload, desktop/mobile layouts, keyboard games, and synthetic audio recording. Synthetic audio does not establish physical microphone accuracy.
+
+`python build_portable.py portable/VocalStudio.pyz` rebuilds the portable application and writes its SHA-256 checksum. Builds are reproducible with the same source and Python/zlib toolchain; `SOURCE_DATE_EPOCH` optionally sets a fixed UTC archive timestamp (years 1980–2107). GitHub Actions runs verification and prepares downloadable build artifacts; it does not publish a release automatically.
